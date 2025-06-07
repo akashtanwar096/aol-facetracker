@@ -1,0 +1,7 @@
+py311
+final/faces.db
+final/face_embeddings_db.pkl
+aws_key_code.txt
+.DS_Store
+cookie.txt
+final/__pycache__/
