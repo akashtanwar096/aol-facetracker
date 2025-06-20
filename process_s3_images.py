@@ -28,13 +28,10 @@ def sort_all_s3_objects_datewise(all_s3_filtered):
     for obj in all_s3_filtered:
         obj_datetime = obj['LastModified'].astimezone(india_tz)
 
-
         obj_date = obj_datetime.date()
         
-
-        
         if(obj_date in datewise_objs.keys()):
-            ############ WARNING: NEED TO REMOVE FOR FINAL CORRECT REPORT - THIS IS  ONLY FOR TESTING (process first 20 images per day only)
+            ############ WARNING: NEED TO REMOVE FOR FINAL CORRECT REPORT - THIS IS ONLY FOR TESTING (process first 20 images per day only)
             if(len(datewise_objs[obj_date])<20):
                 datewise_objs[obj_date].append(obj)
         else:
@@ -78,8 +75,29 @@ def process_s3_objects_date(s3client , edate, all_s3_for_date, req_bucket_name):
     conn.close()
 
 
+def get_already_processed_images():
+    # we have a day of s3 objects here
+    # import pdb; pdb.set_trace()
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
 
-def get_all_images_in_s3(s3client, req_bucket_name,req_prefix=''):
+    c.execute(f"""
+        SELECT DISTINCT image_path FROM faces;
+        """)
+   
+    data = c.fetchall()
+    data = pd.DataFrame(data)
+
+    # import pdb; pdb.set_trace()
+    
+    conn.close()
+    if(len(data.index)==0):
+        return []
+        
+    return data[0].tolist();
+
+
+def get_all_images_in_s3(s3client, req_bucket_name, req_prefix=''):
     s3 = s3client
 
     response = s3.list_objects_v2(Bucket=req_bucket_name)
@@ -95,12 +113,11 @@ def get_all_images_in_s3(s3client, req_bucket_name,req_prefix=''):
                     all_objs.append(obj)
             # for obj in page['Contents']:
                 # print(obj['Key'])
-    
+    # import pdb; pdb.set_trace()
     return all_objs
 
 
 def main():
-
     tday = datetime.today()
     
     enter_year_of_events = input(f"Enter year of the events: (default: {tday.strftime('%Y')})")
@@ -111,17 +128,49 @@ def main():
     if(not enter_month_of_events):
         enter_month_of_events = tday.strftime('%m')
 
-
+    enter_day_of_events = input(f"Enter day of events since when you want events to be processed: (default: {tday.strftime('%d')})")
+    if(not enter_day_of_events):
+        enter_day_of_events = tday.strftime('%d')
+    
+    since_date = pd.to_datetime(enter_year_of_events+'-'+enter_month_of_events+'-'+enter_day_of_events, format='%Y-%m-%d')
+    print(f"Will consider images since {since_date.strftime('%Y-%m-%d')} of the month/year {enter_month_of_events}/{enter_year_of_events}")
     prefix = f'file/pic/photo/{enter_year_of_events}/{enter_month_of_events}/'
     bucket_name = 'soulbook-replica'
     s3 = get_s3_client()
     all_s3_objects_filtered = get_all_images_in_s3(s3, bucket_name, req_prefix=prefix)
     datewise_s3_objs = sort_all_s3_objects_datewise(all_s3_objects_filtered)
     
+    to_be_deleted_keys = []
+    for key in datewise_s3_objs.keys():
+        if(key < since_date.date()):
+            print(f"Need to ignore images for the date:{key}")
+            # del datewise_s3_objs[key]
+            to_be_deleted_keys.append(key)
+    
+    for key_ in to_be_deleted_keys:
+        del datewise_s3_objs[key_]
 
     print(f"Received {len(all_s3_objects_filtered)} all_s3_objects_filtered and numdates:{len(datewise_s3_objs.keys())}")
+
+    # We don't want to repeat process images, so can filter based on dates and images processed
+    # remove images that are already processed
     setup_database()
+
+    already_processed_s3keys = get_already_processed_images()
+
+    for key in datewise_s3_objs.keys():
+        print(f"Orig length of images in date:{key}    : {len(datewise_s3_objs[key])}")
+        to_be_removed_imgk = []
+        for imgk in datewise_s3_objs[key]:
+            # import pdb; pdb.set_trace()
+            if(imgk['Key'] in already_processed_s3keys):
+                to_be_removed_imgk.append(imgk)
+
+        for tbrimgk in to_be_removed_imgk:
+            datewise_s3_objs[key].remove(tbrimgk)
+        print(f"Final length of images in date:{key}    : {len(datewise_s3_objs[key])}")
     
+    # import pdb; pdb.set_trace();
     t1 = time.time()
     for edate in datewise_s3_objs.keys():
         print(f"processing edate: {edate}")
@@ -131,7 +180,6 @@ def main():
         t1b = time.time()
         
         print(f"✅ Faces added to database for {edate.strftime('%Y-%m-%d')} time taken:{t1b-t1a}")
-
 
         print(f"✅ Daily counts computed for {edate.strftime('%Y-%m-%d')} and stored!")
 

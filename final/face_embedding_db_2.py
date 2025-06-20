@@ -47,6 +47,7 @@ class FaceEmbeddingDB:
 
         for face_id, stored_embedding in self.embeddings.items():
             stored_embedding = stored_embedding / np.linalg.norm(stored_embedding)
+
             score = np.dot(stored_embedding, face_embedding)
             if score > best_score:
                 best_score = score
@@ -62,33 +63,33 @@ class FaceEmbeddingDB:
         self.save_db()
         return new_id
 
-    def get_face_id(self, face_image, threshold=0.6):
-        """Get face ID using ArcFace, create new one if needed"""
+    # def get_face_id(self, face_image, threshold=0.6):
+    #     """Get face ID using ArcFace, create new one if needed"""
 
-        faces = self.model.get(face_image)
-        if not faces:
-            return None
+    #     faces = self.model.get(face_image)
+    #     if not faces:
+    #         return None
 
-        face_embedding = faces[0].embedding
+    #     face_embedding = faces[0].embedding
 
-        # Compare against known embeddings
-        best_score = -1
-        best_id = None
-        for face_id, stored_embedding in self.embeddings.items():
-            score = self._cosine_similarity(stored_embedding, face_embedding)
-            if score > best_score:
-                best_score = score
-                best_id = face_id
+    #     # Compare against known embeddings
+    #     best_score = -1
+    #     best_id = None
+    #     for face_id, stored_embedding in self.embeddings.items():
+    #         score = self._cosine_similarity(stored_embedding, face_embedding)
+    #         if score > best_score:
+    #             best_score = score
+    #             best_id = face_id
 
-        if best_score >= threshold:
-            return best_id
+    #     if best_score >= threshold:
+    #         return best_id
         
-        print(f"best_score:{best_score}   threshold:{threshold}")
-        # No match, create new ID
-        new_id = self._generate_new_id()
-        self.embeddings[new_id] = face_embedding
-        self.save_db()
-        return new_id
+    #     print(f"best_score:{best_score}   threshold:{threshold}")
+    #     # No match, create new ID
+    #     new_id = self._generate_new_id()
+    #     self.embeddings[new_id] = face_embedding
+    #     self.save_db()
+    #     return new_id
 
     def _generate_new_id(self):
         if not self.embeddings:

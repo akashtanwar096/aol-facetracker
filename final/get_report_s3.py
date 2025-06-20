@@ -7,12 +7,14 @@ from final.s3_client import get_s3_client
 import base64
 
 
-
 def face_report(faceid):
     s3 = get_s3_client()
 
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+
+    # now every face is a list of face_ids that are stored in a pickle object
+
     c.execute(f"""
         SELECT * from faces where face_id={faceid};
         """)
@@ -56,11 +58,12 @@ def get_report_optimized(start_date, end_date):
     data = c.fetchall()
     report = {}
     
-    
     c.execute(f"""select * from faces order by event_date desc;""")
     all_faces = pd.DataFrame(c.fetchall());
     all_faces.columns = ['rid','event_date','event_name','iurl','location','face_id']
+    
     # import pdb; pdb.set_trace()
+
     s3 = get_s3_client()
 
     for face_id, count in data:
