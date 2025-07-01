@@ -12,11 +12,15 @@ from insightface.app import FaceAnalysis
 
 
 class FaceEmbeddingDB:
-    def __init__(self, db_path="final/face_embeddings_db.pkl", face_map_path="final/faces_map_db.pkl", device="cuda"):
+    def __init__(self, db_path="final/face_embeddings_db.pkl", cluster_map_path="final/cluster_db.pkl", device="cuda"):
         self.db_path = db_path
-        # self.emb_count = 0
+        self.cluster_map_path = cluster_map_path
+        
+        
         self.embeddings = {}  # face_id -> embedding , 0 marks the number of faces seen till now
-        self.faces_map = {} # specific face_ids that are merged with another face_id, these face_ids have no existence of their own, rather use the value of the dict for their id as the original face id
+        self.clusters = {} # cluster id and list of face ids in the cluster
+        self.reverse_cluster_map = {}
+
         self.load_db()
 
         # Load ArcFace model
@@ -26,24 +30,32 @@ class FaceEmbeddingDB:
     def _cosine_similarity(self, a, b):
         return dot(a, b) / (norm(a) * norm(b))
 
+    def _populate_reverse_cluster_map(self):
+        for k in self.clusters.keys():
+            for v in self.clusters[k]:
+                self.reverse_cluster_map[v] = k
+
     def load_db(self):
         if os.path.exists(self.db_path):
             try:
                 with open(self.db_path, "rb") as f:
                     self.embeddings = pickle.load(f)
-                with open(self.face_map_path, "rb") as f:
-                    self.faces_map = pickle.load(f)
-                print(f"Loaded {len(self.embeddings)} face embeddings from database")
+                with open(self.cluster_map_path, "rb") as f:
+                    self.clusters = pickle.load(f)
+                    self._populate_reverse_cluster_map()
+                print(f"Loaded {len(self.embeddings)} face embeddings from database and {len(self.clusters)} clusters")
             except Exception as e:
-                print(f"Error loading face database: {e}")
+                print(f"🔴 ERROR loading face database: {e}")
                 self.embeddings = {}
+                self.clusters = {}
+                self.reverse_cluster_map = {}
 
     def save_db(self):
         with open(self.db_path, "wb") as f:
             pickle.dump(self.embeddings, f)
-        with open(self.face_map_path, "wb") as f:
-            pickle.dump(self.faces_map, f)
-        print(f"Saved {len(self.embeddings)} face embeddings to database. and {len(self.faces_map)} faces_map to database.")
+        with open(self.cluster_map_path, "wb") as f:
+            pickle.dump(self.clusters, f)
+        print(f"Saved {len(self.embeddings)} face embeddings to database. and {len(self.clusters)} clusters to database.")
 
     def match_embedding(self, face_embedding, aug_embeddings, threshold=0.6): 
         # return the best matched id, along with all the other ids that need to be changed to this best id
@@ -68,7 +80,7 @@ class FaceEmbeddingDB:
                     aug_embedding_ = aug_embedding_ / np.linalg.norm(aug_embedding_)
                     score = np.dot(stored_embedding, aug_embedding_)
                     
-                    if score>threshold:
+                    if score>=threshold:
                         all_matches.append( (face_id, score) )
 
                     if score > best_score:
@@ -77,39 +89,84 @@ class FaceEmbeddingDB:
 
         
         # print(f"best_score:{best_score}   threshold:{threshold}  best_face_id:{best_id}")
+
         if best_score >= threshold:
-            # although we are returning best_id, but the new face which is of best_id can add more information to best_id!
+            # Although we are returning best_id, but the new face which is of best_id can add more information to best_id!
             # hence we need to store everything for best_id!
             # so....
 
+            # We need to merge the clusters of all_matches
+            # Consider cluster id of each face id and re-assign the cluster if needed
+            for fid,sc in all_matches:
+                # assign all fids the best cluster id
+
+                print(f"CLUSTERS MERGED: of face_id: {fid}  from clust_id:{self.reverse_cluster_map[fid]}  to  new clust_id:{self.reverse_cluster_map[best_id]}")
+                self._assign_cluster(fid, self.reverse_cluster_map[best_id])
+
+
             self.embeddings[best_id].append(face_embedding)
+
+            # for all the other matches of face_id -> a mapping needs to be made to the best face_id
+            # print(f"a  embedding length:{len(self.embeddings.keys())}")
             self.save_db()
 
             # It is also possible that there are multiple matches for a face
             # Means 2 face ids getting reported, so we need to store only 1
             # At the same time we need to remove one of the face_ids, but need to maintain the last known face_id
 
-            return best_id
+            return self.reverse_cluster_map[best_id], best_id
 
-        new_id = self._generate_new_id()
+        new_cluster_id, new_face_id = self._generate_new_id()
+
         # print(f"generating new face id: {new_id}")
-        self.embeddings[new_id] = [face_embedding]
+        self.embeddings[new_face_id] = [face_embedding]
+        # print(f"b new embedding length:{len(self.embeddings.keys())}")
         self.save_db()
 
-        return new_id
+        return new_cluster_id, new_face_id
 
-    
+    def _generate_new_cluster_id(self):
+        if not self.clusters:
+            return 1
+        else:
+            return max(self.clusters.keys()) + 1
+
+    def _assign_cluster(self, face_id, clust_id=None):
+        if(clust_id is None):
+            clust_id = self._generate_new_cluster_id()
+
+        if(face_id not in self.reverse_cluster_map.keys()):
+            self.clusters[clust_id] = [face_id]
+            self.reverse_cluster_map[face_id] = clust_id
+        else:
+            # means face_id is already assigned a cluster before
+            # first remove from the previous cluster
+            
+            if(self.reverse_cluster_map[face_id]==clust_id):
+                # clust id is already the same
+                return clust_id
+
+            if face_id in self.clusters[self.reverse_cluster_map[face_id]]:
+                self.clusters[self.reverse_cluster_map[face_id]].remove(face_id)
+
+            # now add the face_id to the clust_id
+            if(clust_id in self.clusters):
+                self.clusters[clust_id].append(face_id)
+            else:
+                self.clusters[clust_id] = [face_id]
+
+            self.reverse_cluster_map[face_id] = clust_id
+        return clust_id
 
     def _generate_new_id(self):
         if not self.embeddings:
-            return 1
+            clust_id = self._assign_cluster(1)
+            return clust_id,1
         
-        # self.emb_count += 1
+        # a new face demands a new cluster id and a new face id
+        new_face_id = max(self.embeddings.keys()) + 1
+
+        clust_id = self._assign_cluster(new_face_id)
         
-        # return self.emb_count
+        return clust_id,new_face_id
 
-        return max(self.embeddings.keys()) + 1
-
-
-
-        

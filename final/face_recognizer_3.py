@@ -166,11 +166,12 @@ class FaceRecognizer:
                         _,face_aug = self.detect_faces_from_response(crop)
                         if face_aug: aug_embeddings.append(face_aug[0].embedding)
 
-            face_id = self.face_db.match_embedding(embedding, aug_embeddings)
+            clust_id, face_id = self.face_db.match_embedding(embedding, aug_embeddings)
 
             
+            
             if face_id:
-                results.append({"face_id": face_id, "location": (top, right, bottom, left)})
+                results.append({"clust_id":clust_id, "face_id": face_id, "location": (top, right, bottom, left)})
 
         return results
 

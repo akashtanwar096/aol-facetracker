@@ -14,7 +14,8 @@ def setup_database():
                 event TEXT,
                 image_path TEXT,  -- Store the original image path
                 location TEXT,  -- The location of the face in the image
-                face_id TEXT  -- Unique ID for each face
+                face_id TEXT,  -- Unique ID for each face
+                cluster_id TEXT  -- cluster ID of each face id
             )
         """)
 

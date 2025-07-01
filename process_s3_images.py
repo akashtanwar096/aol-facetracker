@@ -64,11 +64,15 @@ def process_s3_objects_date(s3client , edate, all_s3_for_date, req_bucket_name):
         print(f"Found {len(faces)} faces in {eventname}:{s3obj['Key']}")
         
         for face in faces:
+            clust_id = face["clust_id"]
             face_id = face["face_id"]
             location = face["location"]
-            c.execute("INSERT INTO faces (event_date, event, image_path, location, face_id) VALUES (?, ?, ?, ?, ?)",
-                (edate.strftime('%Y-%m-%d'), eventname, s3obj['Key'], str(location), face_id))
-        
+            c.execute("INSERT INTO faces (event_date, event, image_path, location, face_id, cluster_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (edate.strftime('%Y-%m-%d'), eventname, s3obj['Key'], str(location), face_id, clust_id))
+            
+            # here we also need to replace the cluster id of all the face_id in faces.db with the return value
+            c.execute(f"UPDATE faces SET cluster_id = {clust_id} WHERE face_id = {face_id};")
+
         print(f"🟢  Processed {len(faces)} faces in {eventname}:{s3obj['Key']}")
 
     conn.commit()

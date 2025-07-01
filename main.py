@@ -98,8 +98,8 @@ async def get_face_report(request: Request, fid: str):
     
     # Return HTML template with the report data
     return templates.TemplateResponse(
-        "facereport.html", 
-        {"request": request, "report": report, "start_date": "", "end_date": ""}
+        "clusterreport.html", 
+        {"request": request, "report": report, "clust_id": fid}
     )
 
 @app.get("/health")

@@ -65,7 +65,7 @@
             <tbody>
                 {% for id, data in report.items() %}
                 <tr>
-                    <td class="count"># {{ data.face_id }}</td>
+                    <td class="count"># {{ data.clust_id }}</td>
                     <td>
                         <img src="/image?image_path={{ data.image }}&location={{ data.cutout }}" alt="Person {{ id }}">
                     </td>
