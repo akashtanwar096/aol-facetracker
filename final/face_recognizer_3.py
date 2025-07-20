@@ -2,7 +2,7 @@ import cv2
 import face_recognition
 import torch
 from facenet_pytorch import MTCNN
-from face_embedding_db_2 import FaceEmbeddingDB
+# from face_embedding_db_2 import FaceEmbeddingDB
 import numpy as np
 from PIL import Image
 import cv2
@@ -168,8 +168,6 @@ class FaceRecognizer:
 
             clust_id, face_id = self.face_db.match_embedding(embedding, aug_embeddings)
 
-            
-            
             if face_id:
                 results.append({"clust_id":clust_id, "face_id": face_id, "location": (top, right, bottom, left)})
 

@@ -1,4 +1,4 @@
-import face_recognition
+# import face_recognition
 import numpy as np
 import os
 import sqlite3
@@ -19,6 +19,7 @@ from db import setup_database
 import boto3
 import pytz
 from final.s3_client import get_s3_client
+from facesdb_embeddingdb_interface import insert_new_face_instance_in_db
 
 india_tz = pytz.timezone('Asia/Kolkata')
 
@@ -34,6 +35,7 @@ def sort_all_s3_objects_datewise(all_s3_filtered):
             ############ WARNING: NEED TO REMOVE FOR FINAL CORRECT REPORT - THIS IS ONLY FOR TESTING (process first 20 images per day only)
             if(len(datewise_objs[obj_date])<20):
                 datewise_objs[obj_date].append(obj)
+
         else:
             datewise_objs[obj_date] = [obj]
     
@@ -46,8 +48,8 @@ def process_s3_objects_date(s3client , edate, all_s3_for_date, req_bucket_name):
     year, month, day = edate.year, edate.month, edate.day
     eventname = edate.strftime('%Y%m%d')
 
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
+    # conn = sqlite3.connect(DB_FILE)
+    # c = conn.cursor()
 
     print(f"Processing event: {eventname}   numimages:{len(all_s3_for_date)}")
     face_recog_ = FaceRecognizer()
@@ -63,20 +65,22 @@ def process_s3_objects_date(s3client , edate, all_s3_for_date, req_bucket_name):
 
         print(f"Found {len(faces)} faces in {eventname}:{s3obj['Key']}")
         
-        for face in faces:
-            clust_id = face["clust_id"]
-            face_id = face["face_id"]
-            location = face["location"]
-            c.execute("INSERT INTO faces (event_date, event, image_path, location, face_id, cluster_id) VALUES (?, ?, ?, ?, ?, ?)",
-                (edate.strftime('%Y-%m-%d'), eventname, s3obj['Key'], str(location), face_id, clust_id))
+        insert_new_face_instance_in_db(faces, edate, eventname, s3obj)
+
+        # for face in faces:
+        #     clust_id = face["clust_id"]
+        #     face_id = face["face_id"]
+        #     location = face["location"]
+        #     c.execute("INSERT INTO faces (event_date, event, image_path, location, face_id, cluster_id) VALUES (?, ?, ?, ?, ?, ?)",
+        #         (edate.strftime('%Y-%m-%d'), eventname, s3obj['Key'], str(location), face_id, clust_id))
             
-            # here we also need to replace the cluster id of all the face_id in faces.db with the return value
-            c.execute(f"UPDATE faces SET cluster_id = {clust_id} WHERE face_id = {face_id};")
+        #     # here we also need to replace the cluster id of all the face_id in faces.db with the return value
+        #     c.execute(f"UPDATE faces SET cluster_id = {clust_id} WHERE face_id = {face_id};")
 
         print(f"🟢  Processed {len(faces)} faces in {eventname}:{s3obj['Key']}")
 
-    conn.commit()
-    conn.close()
+    # conn.commit()
+    # conn.close()
 
 
 def get_already_processed_images():

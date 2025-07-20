@@ -6,3 +6,4 @@ aws_key_code.txt
 cookie.txt
 final/__pycache__/
 final/cluster_db.pkl
+final/backup/
