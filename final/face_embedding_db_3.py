@@ -99,9 +99,11 @@ class FaceEmbeddingDB:
             # Consider cluster id of each face id and re-assign the cluster if needed
             for fid,sc in all_matches:
                 # assign all fids the best cluster id
-                if(self.reverse_cluster_map[fid]!=self.reverse_cluster_map[best_id]):
+                if(self.reverse_cluster_map[fid] != self.reverse_cluster_map[best_id]):
                     print(f"CLUSTERS MERGED: of face_id: {fid}  from clust_id:{self.reverse_cluster_map[fid]}  to  new clust_id:{self.reverse_cluster_map[best_id]}")
                     self._assign_cluster(fid, self.reverse_cluster_map[best_id])
+                    # when some faceid went to best_id later cluster we did not update it in faces.db
+                    # so this will be updated too
 
 
             self.embeddings[best_id].append(face_embedding)
@@ -114,16 +116,19 @@ class FaceEmbeddingDB:
             # Means 2 face ids getting reported, so we need to store only 1
             # At the same time we need to remove one of the face_ids, but need to maintain the last known face_id
 
-            return self.reverse_cluster_map[best_id], best_id
+            return self.reverse_cluster_map[best_id], best_id, all_matches
 
         new_cluster_id, new_face_id = self._generate_new_id()
 
         # print(f"generating new face id: {new_id}")
         self.embeddings[new_face_id] = [face_embedding]
+        if(new_cluster_id not in self.clusters.keys()):
+            self.clusters[new_cluster_id] = [new_face_id]
+
         # print(f"b new embedding length:{len(self.embeddings.keys())}")
         self.save_db()
 
-        return new_cluster_id, new_face_id
+        return new_cluster_id, new_face_id, []
 
     def _generate_new_cluster_id(self):
         if not self.clusters:
@@ -132,9 +137,12 @@ class FaceEmbeddingDB:
             return max(self.clusters.keys()) + 1
 
     def _assign_cluster(self, face_id, clust_id=None):
+
         if(clust_id is None):
             clust_id = self._generate_new_cluster_id()
+            # self.clusters[clust_id] = [face_id] # initialize
 
+        print(f"assigning cluster : {clust_id}  to face_id :{face_id} ")
         if(face_id not in self.reverse_cluster_map.keys()):
             self.clusters[clust_id] = [face_id]
             self.reverse_cluster_map[face_id] = clust_id
@@ -159,27 +167,31 @@ class FaceEmbeddingDB:
         return clust_id
 
 
-    def merge_clusters(clust_id_1, clust_id_2):
+    def merge_clusters(self, clust_id_1, clust_id_2):
         # all the face_ids in clust_id_2 must move to clust_id_1
         # and clust_id_2 must become empty
         if( ( clust_id_1 not in self.clusters.keys() ) or ( clust_id_2 not in self.clusters.keys() ) ):
+            print(f"ERROR: either {clust_id_1} is not in self.clusters or {clust_id_2}")
             return
         
-        fids_2 = self.clusters[clust_id_2]
+        fids_2 = list(self.clusters[clust_id_2])
+        print(f"{fids_2}  - list of faces in : cluster id {clust_id_2}")
         for fid2 in fids_2:
+            print(f"fid:{fid2} is assigned the cluster:{clust_id_1}")
             self._assign_cluster(fid2, clust_id_1)
-
+        print(f"clust_id_2 is now empty. total_faces in clusterid2: {len(fids_2)}")
         self.clusters[clust_id_2] = [] # empty the cluster 2, all in cluster 1
         self.save_db()
         return fids_2,clust_id_1 # return all the faceids whose cluster was changed to cluster_id_1
 
 
-    def unmerge_faces(face_id_1, face_id_2):
+    def unmerge_faces(self, face_id_1, face_id_2):
         # face_id_1 and face_id_2 should have the same cluster id
         # Now find any other empty cluster id and assign face_id_2 that
 
         if(self.reverse_cluster_map[face_id_1] != self.reverse_cluster_map[face_id_2]):
             # they already have different clusters, nothing to do
+            print(f"ERROR: clust id of f1:{face_id_1} - {self.reverse_cluster_map[face_id_1]}!= clust id of f2:{face_id_2} - {self.reverse_cluster_map[face_id_2]}")
             return
         
         existing_cluster = self.reverse_cluster_map[face_id_1]
@@ -187,13 +199,19 @@ class FaceEmbeddingDB:
         chosen_cluster = None
         for k in self.clusters.keys():
             if(len(self.clusters[k])==0):
+                print(f"choosing the cluster id : {k}  because it has 0 faceids.")
                 chosen_cluster = k
                 break
         
         if(chosen_cluster is None):
             chosen_cluster = self._generate_new_cluster_id()
+            print(f"No empty cluster found so assigning new : {chosen_cluster}")
+        
+        assign_cluster = self._assign_cluster(face_id_2, chosen_cluster)
+        
         self.save_db()
-        return self._assign_cluster(face_id_2, chosen_cluster)
+
+        return assign_cluster
 
 
     def _generate_new_id(self):
@@ -205,6 +223,6 @@ class FaceEmbeddingDB:
         new_face_id = max(self.embeddings.keys()) + 1
 
         clust_id = self._assign_cluster(new_face_id)
-        
+
         return clust_id,new_face_id
 

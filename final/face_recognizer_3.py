@@ -27,7 +27,6 @@ def is_valid_image(image_bytes):
     return True
 
 
-
 def expand_or_contract_box(box, scale, image_shape):
     x1, y1, x2, y2 = box
     w, h = x2 - x1, y2 - y1
@@ -166,10 +165,10 @@ class FaceRecognizer:
                         _,face_aug = self.detect_faces_from_response(crop)
                         if face_aug: aug_embeddings.append(face_aug[0].embedding)
 
-            clust_id, face_id = self.face_db.match_embedding(embedding, aug_embeddings)
+            clust_id, face_id, all_matches = self.face_db.match_embedding(embedding, aug_embeddings)
 
             if face_id:
-                results.append({"clust_id":clust_id, "face_id": face_id, "location": (top, right, bottom, left)})
+                results.append({"clust_id":clust_id, "face_id": face_id, "location": (top, right, bottom, left), "all_matches": all_matches})
 
         return results
 
